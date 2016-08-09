@@ -12,17 +12,23 @@ img_rows = 64
 img_cols = 80
 n_features = img_cols * img_rows
 smooth = 1.0
+ave_coverage = 0.10
 
-def dice_coef(y_true, y_pred):
+def my_loss(y_true, y_pred):
+    #flatten da tensors a smidge
     y_true_f = tf.reshape(y_true, shape=(-1,n_features))
     y_pred_f = tf.reshape(y_pred, shape=(-1,n_features))
+    #Calc dice
     y_true_s = tf.reduce_sum(y_true_f, reduction_indices=(1))
     y_pred_s = tf.reduce_sum(y_pred_f, reduction_indices=(1))
     intersection = tf.reduce_sum(tf.mul(y_true_f,y_pred_f), reduction_indices=(1))
-    return tf.reduce_mean(tf.div(tf.add(tf.mul(2.0,intersection),smooth),tf.add(tf.add(y_true_s,y_pred_s),smooth)), reduction_indices=(0))
-
-def dice_coef_loss(y_true, y_pred):
-    return 1.0-dice_coef(y_true, y_pred)
+    dice_coef = tf.reduce_mean(tf.div(tf.add(tf.mul(2.0,intersection),smooth),tf.add(tf.add(y_true_s,y_pred_s),smooth)), reduction_indices=(0))
+    #Calc ratio
+    ytrue_cov = tf.add(tf.reduce_sum(tf.cast(y_true_f > 0.5,dtype='float32'), reduction_indices=1),ave_coverage)
+    ypred_cov = tf.add(tf.reduce_sum(tf.cast(y_pred_f > 0.5,dtype='float32'), reduction_indices=1),ave_coverage)
+    ratio_loss = tf.reduce_mean(tf.abs(tf.add(tf.div(ytrue_cov,ypred_cov),-1.0)))
+    #return
+    return ( -dice_coef -ratio_loss)
 
 def get_net(): 
     input_data = tflearn.input_data(shape=[None, img_rows, img_cols, 1]) #64 by 80
@@ -63,8 +69,8 @@ def get_net():
 
     conv10 = tflearn.conv_2d(conv9, nb_filter = 1, filter_size = 1, activation='sigmoid')
 
-    adam = tflearn.Adam(learning_rate=1e5)
-    net = tflearn.regression(conv10, optimizer='adam', loss=dice_coef_loss)
+    adam = tflearn.Adam(learning_rate=1e6)
+    net = tflearn.regression(conv10, optimizer='adam', loss=my_loss)
     model = tflearn.DNN(net, tensorboard_verbose=1,tensorboard_dir='/tmp/tflearn_logs/')
 
     return model
@@ -90,7 +96,7 @@ def train_and_predict():
     print('Fitting model...')
     print('-'*30)
     model = get_net()
-    model.fit(imgs_train, imgs_mask_train, n_epoch=20, batch_size=64) #,validation_set=0.15)
+    model.fit(imgs_train, imgs_mask_train, n_epoch=3, batch_size=20) #,validation_set=0.15)
     model.save('tfmodel_v1.tflearn')
 
     print('-'*30)
