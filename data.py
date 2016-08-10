@@ -8,8 +8,8 @@ data_path = 'raw/'
 
 image_rows = 420
 image_cols = 580
-img_rows = 64
-img_cols = 80
+img_rows = 64*2
+img_cols = 80*2
 
 def create_train_data():
     train_data_path = os.path.join(data_path, 'train')

@@ -8,8 +8,6 @@ import tflearn
 from data import load_train_data, load_test_data
 from data import img_rows, img_cols
 
-img_rows = 64
-img_cols = 80
 n_features = img_cols * img_rows
 smooth = 1.0
 ave_coverage = 0.10
@@ -23,15 +21,16 @@ def my_loss(y_true, y_pred):
     y_pred_s = tf.reduce_sum(y_pred_f, reduction_indices=(1))
     intersection = tf.reduce_sum(tf.mul(y_true_f,y_pred_f), reduction_indices=(1))
     dice_coef = tf.reduce_mean(tf.div(tf.add(tf.mul(2.0,intersection),smooth),tf.add(tf.add(y_true_s,y_pred_s),smooth)), reduction_indices=(0))
+    #dice_coef = tf.div(tf.add(tf.mul(2.0,intersection),smooth),tf.add(tf.add(y_true_s,y_pred_s),smooth))
     #Calc ratio
-    ytrue_cov = tf.add(tf.reduce_sum(tf.cast(y_true_f > 0.5,dtype='float32'), reduction_indices=1),ave_coverage)
-    ypred_cov = tf.add(tf.reduce_sum(tf.cast(y_pred_f > 0.5,dtype='float32'), reduction_indices=1),ave_coverage)
+    ytrue_cov = tf.add(tf.reduce_sum(tf.cast(y_true_f > 0.5,dtype='float32'), reduction_indices=1),smooth)
+    ypred_cov = tf.add(tf.reduce_sum(tf.cast(y_pred_f > 0.5,dtype='float32'), reduction_indices=1),smooth)
     ratio_loss = tf.reduce_mean(tf.abs(tf.add(tf.div(ytrue_cov,ypred_cov),-1.0)))
     #return
-    print('Dice: ',tf.Print(dice_coef, [dice_coef],first_n=3),' RatioLoss: ',tf.Print(ratio_loss,[ratio_loss], first_n=3))
-    return ( -dice_coef -ratio_loss)
+    #print('Dice: ',tf.Print(dice_coef, [dice_coef],first_n=3),' RatioLoss: ',tf.Print(ratio_loss,[ratio_loss], first_n=3))
+    return (-dice_coef-ratio_loss)
 
-def get_net(): 
+def get_net():
     input_data = tflearn.input_data(shape=[None, img_rows, img_cols, 1]) #64 by 80
     conv1 = tflearn.conv_2d(input_data, nb_filter = 32, filter_size = 3, activation='relu')
     conv1 = tflearn.conv_2d(conv1, nb_filter = 32, filter_size = 3, activation='relu')
@@ -70,8 +69,8 @@ def get_net():
 
     conv10 = tflearn.conv_2d(conv9, nb_filter = 1, filter_size = 1, activation='sigmoid')
 
-    adam = tflearn.Adam(learning_rate=1e6)
-    net = tflearn.regression(conv10, optimizer='adam', loss=my_loss)
+    adam = tflearn.Adam(learning_rate=1e-7)
+    net = tflearn.regression(conv10, optimizer=adam,loss=my_loss)
     model = tflearn.DNN(net, tensorboard_verbose=1,tensorboard_dir='/tmp/tflearn_logs/')
 
     return model
@@ -82,23 +81,25 @@ def train_and_predict():
     print('Loading and preprocessing train data...')
     print('-'*30)
     imgs_train, imgs_mask_train = load_train_data()
-
-    imgs_train = imgs_train.astype('float32')
     mean = np.mean(imgs_train)  # mean for data centering
     std = np.std(imgs_train)  # std for data normalization
-
+    imgs_train = imgs_train.astype('float32')
     imgs_train -= mean
     imgs_train /= std
 
     imgs_mask_train = imgs_mask_train.astype('float32')
     imgs_mask_train /= 255.  # scale masks to [0, 1]
 
+    shuffle_ind = np.random.permutation(imgs_train.shape[0])
+    imgs_mask_train = imgs_mask_train[shuffle_ind]
+    imgs_train = imgs_train[shuffle_ind]
+
     print('-'*30)
     print('Fitting model...')
     print('-'*30)
     model = get_net()
-    model.fit(imgs_train, imgs_mask_train, n_epoch=3, batch_size=20) #,validation_set=0.15)
-    model.load('tfmodel_v1.tflearn')
+    model.fit(imgs_train, imgs_mask_train, n_epoch=500, batch_size=50) #,validation_set=0.15)
+    model.save('tfmodel_v1.tflearn')
 
     print('-'*30)
     print('Loading and preprocessing test data...')
@@ -115,6 +116,8 @@ def train_and_predict():
 
     imgs_mask_test = np.empty([imgs_test.shape[0],img_rows, img_cols],dtype='float32')
     for i in range(imgs_test.shape[0]):
+      if i % 100 == 0:
+          print('Done:',i)
       imgs_mask_test[i]  = np.asarray(model.predict(imgs_test[i].reshape(1,img_rows, img_cols,1))[0]).reshape(img_rows, img_cols)
     np.save('imgs_mask_test.npy', imgs_mask_test)
 
