@@ -28,6 +28,7 @@ def my_loss(y_true, y_pred):
     ypred_cov = tf.add(tf.reduce_sum(tf.cast(y_pred_f > 0.5,dtype='float32'), reduction_indices=1),ave_coverage)
     ratio_loss = tf.reduce_mean(tf.abs(tf.add(tf.div(ytrue_cov,ypred_cov),-1.0)))
     #return
+    print('Dice: ',tf.Print(dice_coef, [dice_coef],first_n=3),' RatioLoss: ',tf.Print(ratio_loss,[ratio_loss], first_n=3))
     return ( -dice_coef -ratio_loss)
 
 def get_net(): 
@@ -97,13 +98,12 @@ def train_and_predict():
     print('-'*30)
     model = get_net()
     model.fit(imgs_train, imgs_mask_train, n_epoch=3, batch_size=20) #,validation_set=0.15)
-    model.save('tfmodel_v1.tflearn')
+    model.load('tfmodel_v1.tflearn')
 
     print('-'*30)
     print('Loading and preprocessing test data...')
     print('-'*30)
     imgs_test, imgs_id_test = load_test_data()
-    imgs_test = preprocess(imgs_test)
 
     imgs_test = imgs_test.astype('float32')
     imgs_test -= mean
@@ -112,7 +112,10 @@ def train_and_predict():
     print('-'*30)
     print('Predicting masks on test data...')
     print('-'*30)
-    imgs_mask_test = model.predict(imgs_test, verbose=1)
+
+    imgs_mask_test = np.empty([imgs_test.shape[0],img_rows, img_cols],dtype='float32')
+    for i in range(imgs_test.shape[0]):
+      imgs_mask_test[i]  = np.asarray(model.predict(imgs_test[i].reshape(1,img_rows, img_cols,1))[0]).reshape(img_rows, img_cols)
     np.save('imgs_mask_test.npy', imgs_mask_test)
 
 
