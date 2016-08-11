@@ -8,8 +8,20 @@ data_path = 'raw/'
 
 image_rows = 420
 image_cols = 580
-img_rows = 64*2
-img_cols = 80*2
+img_rows = 64#*2
+img_cols = 80#*2
+
+def calc_dups(imgs_data, cutoff=5.0):
+    dups = set()
+    n_samples = imgs_data.shape[0]
+    pixels = imgs_data[0].shape[0]*imgs_data[0].shape[1]
+    for i in range(n_samples):
+        if i %100 == 0:
+            print('Dup Checked: ',i,' of ',n_samples)
+        for j in range(i+1,n_samples):
+            if( np.sum(np.abs(imgs_data[i]-imgs_data[j])) / pixels <= cutoff):
+                dups.add(j)
+    return dups
 
 def create_train_data():
     train_data_path = os.path.join(data_path, 'train')
